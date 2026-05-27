@@ -191,7 +191,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const replayChunksRef = useRef<{ chunk: Blob; timestamp: number }[]>([])
+  const replayChunksRef = useRef<{ chunk: Blob; timestamp: number; duration?: number }[]>([])
   const headerChunkRef = useRef<Blob | null>(null)
   const metadataHeaderRef = useRef<Uint8Array | null>(null)
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -224,12 +224,12 @@ export function useScreenRecorder(): ScreenRecorderHook {
 
   const getBitrate = useCallback(() => {
     const bitrateMap: Record<string, number> = {
-      low: 2500,
-      medium: 5000,
-      high: 8000,
+      low: 6000,
+      medium: 15000,
+      high: 30000,
     }
     if (settings.bitrate === 'custom') return settings.customBitrate * 1000
-    return (bitrateMap[settings.bitrate] || 8000) * 1000
+    return (bitrateMap[settings.bitrate] || 30000) * 1000
   }, [settings.bitrate, settings.customBitrate])
 
   const getMimeType = useCallback(() => {
@@ -320,15 +320,23 @@ export function useScreenRecorder(): ScreenRecorderHook {
   const acquireStream = useCallback(async (): Promise<MediaStream | null> => {
     try {
       setError(null)
-      const resConstraints = getResolutionConstraints()
+      const videoConstraints: MediaTrackConstraints = {
+        frameRate: { ideal: settings.frameRate },
+        cursor: settings.showCursor ? 'always' : 'never',
+      }
+
+      if (resConstraints.width && resConstraints.height) {
+        videoConstraints.width = { ideal: resConstraints.width }
+        videoConstraints.height = { ideal: resConstraints.height }
+      }
 
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          ...resConstraints,
-          frameRate: settings.frameRate,
-          cursor: settings.showCursor ? 'always' : 'never',
-        } as MediaTrackConstraints,
-        audio: settings.audioEnabled,
+        video: videoConstraints,
+        audio: settings.audioEnabled ? {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        } : false,
       })
 
       const tracks = [...displayStream.getVideoTracks()]
@@ -569,6 +577,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          const now = Date.now()
           if (!headerChunkRef.current) {
             headerChunkRef.current = e.data
             const reader = new FileReader()
@@ -589,9 +598,15 @@ export function useScreenRecorder(): ScreenRecorderHook {
             }
             reader.readAsArrayBuffer(e.data)
           }
+          const lastChunk = replayChunksRef.current[replayChunksRef.current.length - 1]
+          const chunkDuration = lastChunk
+            ? (now - lastChunk.timestamp)
+            : (now - startTimeRef.current)
+          
           replayChunksRef.current.push({
             chunk: e.data,
-            timestamp: Date.now(),
+            timestamp: now,
+            duration: Math.max(100, chunkDuration),
           })
         }
       }
@@ -609,17 +624,30 @@ export function useScreenRecorder(): ScreenRecorderHook {
       startTimeRef.current = Date.now()
       startDurationTimer()
 
-      // Prune old chunks periodically
+      // Prune old chunks periodically using dynamic store settings
       replayPruneIntervalRef.current = setInterval(() => {
+        const { settings: currentSettings } = useRecordingStore.getState()
+        const targetDurationMs = currentSettings.replayBufferDuration * 1000
+        
+        let totalDuration = 0
+        let keepIndex = 0
+        
+        // Walk backwards to find where we exceed targetDurationMs
+        for (let i = replayChunksRef.current.length - 1; i >= 0; i--) {
+          totalDuration += replayChunksRef.current[i].duration || 1000
+          if (totalDuration > targetDurationMs) {
+            keepIndex = i + 1
+            break
+          }
+        }
+        
+        if (keepIndex > 0) {
+          replayChunksRef.current = replayChunksRef.current.slice(keepIndex)
+        }
+
         const now = Date.now()
-        const maxAge = settings.replayBufferDuration * 1000
-        replayChunksRef.current = replayChunksRef.current.filter(
-          (c) => now - c.timestamp < maxAge
-        )
-        const progress = Math.min(
-          100,
-          ((now - startTimeRef.current) / (settings.replayBufferDuration * 1000)) * 100
-        )
+        const elapsed = now - startTimeRef.current
+        const progress = Math.min(100, (elapsed / targetDurationMs) * 100)
         setReplayBufferProgress(progress)
       }, 1000)
     } catch (err: unknown) {
@@ -627,7 +655,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
       setError(message)
       cleanupStream()
     }
-  }, [acquireStream, getBitrate, getMimeType, settings, setIsReplayBuffering, setReplayBufferProgress, startDurationTimer, cleanupStream])
+  }, [acquireStream, getBitrate, getMimeType, setIsReplayBuffering, setReplayBufferProgress, startDurationTimer, cleanupStream])
 
   const stopReplayBuffer = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -648,6 +676,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
   const saveReplay = useCallback(async () => {
     if (replayChunksRef.current.length === 0) return
 
+    const { settings: currentSettings } = useRecordingStore.getState()
     const mimeType = getMimeType()
     const cleanType = mimeType ? mimeType.split(';')[0] : 'video/webm'
 
@@ -679,13 +708,13 @@ export function useScreenRecorder(): ScreenRecorderHook {
     }
 
     const shiftedArray = shiftWebmTimestamps(concatenatedArray)
-    const blobType = settings.format === 'mp4' ? 'video/mp4' : cleanType
+    const blobType = currentSettings.format === 'mp4' ? 'video/mp4' : cleanType
     const blob = new Blob([shiftedArray], { type: blobType })
     const url = URL.createObjectURL(blob)
-    const ext = settings.format === 'mp4' ? 'mp4' : (cleanType.includes('mp4') ? 'mp4' : 'webm')
+    const ext = currentSettings.format === 'mp4' ? 'mp4' : (cleanType.includes('mp4') ? 'mp4' : 'webm')
 
     const duration = Math.min(
-      settings.replayBufferDuration,
+      currentSettings.replayBufferDuration,
       Math.floor((Date.now() - startTimeRef.current) / 1000)
     )
 
@@ -699,7 +728,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
       duration,
       size: blob.size,
       timestamp: Date.now(),
-      resolution: settings.resolution,
+      resolution: currentSettings.resolution,
       format: ext,
       isRegion: false,
     })
@@ -707,8 +736,8 @@ export function useScreenRecorder(): ScreenRecorderHook {
     setVideoPreviewUrl(url)
 
     // Auto-download if enabled
-    if (settings.autoDownload) {
-      const { directoryHandle, settings: currentSettings } = useRecordingStore.getState()
+    if (currentSettings.autoDownload) {
+      const { directoryHandle } = useRecordingStore.getState()
       if (currentSettings.useCustomFolder && directoryHandle) {
         saveToDirectory(directoryHandle, blob, `${name}.${ext}`).then((saved) => {
           if (!saved) {
@@ -719,7 +748,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
         downloadBlob(blob, `${name}.${ext}`)
       }
     }
-  }, [getMimeType, settings, addRecording])
+  }, [getMimeType, addRecording])
 
   // Cleanup on unmount
   useEffect(() => {

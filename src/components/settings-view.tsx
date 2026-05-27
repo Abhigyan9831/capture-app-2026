@@ -356,13 +356,14 @@ export function SettingsView() {
               <Select
                 value={settings.replayBufferDuration.toString()}
                 onValueChange={(v) =>
-                  updateSettings({ replayBufferDuration: parseInt(v) as 30 | 60 | 100 })
+                  updateSettings({ replayBufferDuration: parseInt(v) as 10 | 30 | 60 | 100 })
                 }
               >
                 <SelectTrigger className="bg-[#0a0a0f] border-white/[0.08] text-zinc-300">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#111118] border-white/[0.08]">
+                  <SelectItem value="10">Last 10 seconds</SelectItem>
                   <SelectItem value="30">Last 30 seconds</SelectItem>
                   <SelectItem value="60">Last 60 seconds (1 min)</SelectItem>
                   <SelectItem value="100">Last 100 seconds</SelectItem>

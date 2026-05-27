@@ -19,7 +19,7 @@ export interface RecordingSettings {
   customBitrate: number
   resolution: '480p' | '720p' | '1080p' | '1440p' | '4k' | 'source'
   frameRate: 30 | 60 | 120
-  replayBufferDuration: 30 | 60 | 100
+  replayBufferDuration: 10 | 30 | 60 | 100
   format: 'webm' | 'mp4'
   audioEnabled: boolean
   microphoneEnabled: boolean
@@ -102,7 +102,7 @@ export interface RecordingState {
 const defaultSettings: RecordingSettings = {
   saveDirectory: 'Downloads',
   bitrate: 'high',
-  customBitrate: 8000,
+  customBitrate: 30000,
   resolution: '1080p',
   frameRate: 60,
   replayBufferDuration: 100,
