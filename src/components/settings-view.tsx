@@ -224,9 +224,9 @@ export function SettingsView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#111118] border-white/[0.08]">
-                  <SelectItem value="low">Low (2.5 Mbps)</SelectItem>
-                  <SelectItem value="medium">Medium (5 Mbps)</SelectItem>
-                  <SelectItem value="high">High (8 Mbps)</SelectItem>
+                  <SelectItem value="low">Low (6 Mbps)</SelectItem>
+                  <SelectItem value="medium">Medium (15 Mbps)</SelectItem>
+                  <SelectItem value="high">High (30 Mbps)</SelectItem>
                   <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
