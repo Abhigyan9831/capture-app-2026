@@ -235,7 +235,8 @@ export function useScreenRecorder(): ScreenRecorderHook {
   const handleRecordingStop = useCallback(
     (stream: MediaStream, mimeType: string, region?: Region) => {
       if (chunksRef.current.length > 0) {
-        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' })
+        const cleanType = mimeType ? mimeType.split(';')[0] : 'video/webm'
+        const blob = new Blob(chunksRef.current, { type: cleanType })
         const url = URL.createObjectURL(blob)
         setVideoPreviewUrl(url)
 
@@ -245,7 +246,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
         const name = region
           ? `Region_${new Date().toISOString().replace(/[:.]/g, '-')}`
           : `Recording_${new Date().toISOString().replace(/[:.]/g, '-')}`
-        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
+        const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
 
         addRecording({
           id: crypto.randomUUID(),
@@ -290,8 +291,8 @@ export function useScreenRecorder(): ScreenRecorderHook {
       if (!stream) return
 
       try {
-        const mimeType = getMimeType()
-        let recordStream: MediaStream = stream
+      const mimeType = getMimeType()
+      let recordStream: MediaStream = stream
 
         // If region is selected, create a canvas-based cropped stream
         if (region && region.width > 0 && region.height > 0) {
@@ -471,13 +472,14 @@ export function useScreenRecorder(): ScreenRecorderHook {
     if (replayChunksRef.current.length === 0) return
 
     const mimeType = getMimeType()
+    const cleanType = mimeType ? mimeType.split(';')[0] : 'video/webm'
     const chunks = replayChunksRef.current.map((c) => c.chunk)
     if (headerChunkRef.current && chunks[0] !== headerChunkRef.current) {
       chunks.unshift(headerChunkRef.current)
     }
-    const blob = new Blob(chunks, { type: mimeType || 'video/webm' })
+    const blob = new Blob(chunks, { type: cleanType })
     const url = URL.createObjectURL(blob)
-    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
+    const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
 
     const duration = Math.min(
       settings.replayBufferDuration,

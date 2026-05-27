@@ -173,6 +173,7 @@ export function RecordingsView() {
                     controls
                     autoPlay
                     className="w-full max-h-[400px]"
+                    playsInline
                   />
                 </div>
                 <div className="p-4 flex items-center justify-between">
