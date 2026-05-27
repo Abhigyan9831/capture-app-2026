@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { AnimatePresence } from 'framer-motion'
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false)
   const {
     currentView,
     isRecording,
@@ -28,10 +29,17 @@ export default function Home() {
   const recorder = useScreenRecorder()
   const [regionStream, setRegionStream] = useState<MediaStream | null>(null)
 
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Show floating controls when recording or buffering
   useEffect(() => {
+    if (!mounted) return
     setShowFloatingControls(isRecording || isReplayBuffering)
-  }, [isRecording, isReplayBuffering, setShowFloatingControls])
+  }, [isRecording, isReplayBuffering, setShowFloatingControls, mounted])
+
+
 
   // Global keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -223,28 +231,34 @@ export default function Home() {
 
   return (
     <div className="h-screen w-screen flex bg-[#08080d] text-white overflow-hidden">
-      {/* Sidebar */}
-      <AppSidebar />
+      {!mounted ? (
+        <div className="h-screen w-screen bg-[#08080d]" />
+      ) : (
+        <>
+          {/* Sidebar */}
+          <AppSidebar />
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden">{renderView()}</main>
+          {/* Main Content */}
+          <main className="flex-1 overflow-hidden">{renderView()}</main>
 
-      {/* Floating Controls */}
-      <FloatingControls
-        onPauseRecording={recorder.pauseRecording}
-        onResumeRecording={recorder.resumeRecording}
-        onStopRecording={handleStopRecording}
-        onSaveReplay={handleSaveReplay}
-        onStopReplayBuffer={handleStopReplayBuffer}
-      />
+          {/* Floating Controls */}
+          <FloatingControls
+            onPauseRecording={recorder.pauseRecording}
+            onResumeRecording={recorder.resumeRecording}
+            onStopRecording={handleStopRecording}
+            onSaveReplay={handleSaveReplay}
+            onStopReplayBuffer={handleStopReplayBuffer}
+          />
 
-      {/* Region Selector Overlay */}
-      {isRegionSelecting && regionStream && (
-        <RegionSelector
-          stream={regionStream}
-          onConfirm={handleRegionConfirm}
-          onCancel={handleRegionCancel}
-        />
+          {/* Region Selector Overlay */}
+          {isRegionSelecting && regionStream && (
+            <RegionSelector
+              stream={regionStream}
+              onConfirm={handleRegionConfirm}
+              onCancel={handleRegionCancel}
+            />
+          )}
+        </>
       )}
     </div>
   )

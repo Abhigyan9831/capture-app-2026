@@ -73,6 +73,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const replayChunksRef = useRef<{ chunk: Blob; timestamp: number }[]>([])
+  const headerChunkRef = useRef<Blob | null>(null)
   const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const replayPruneIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(0)
@@ -405,9 +406,13 @@ export function useScreenRecorder(): ScreenRecorderHook {
       })
 
       replayChunksRef.current = []
+      headerChunkRef.current = null
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          if (!headerChunkRef.current) {
+            headerChunkRef.current = e.data
+          }
           replayChunksRef.current.push({
             chunk: e.data,
             timestamp: Date.now(),
@@ -418,6 +423,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
       recorder.onstop = () => {
         cleanupStream()
         replayChunksRef.current = []
+        headerChunkRef.current = null
       }
 
       mediaRecorderRef.current = recorder
@@ -458,6 +464,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
     setIsReplayBuffering(false)
     setRecordingDuration(0)
     setReplayBufferProgress(0)
+    headerChunkRef.current = null
   }, [setIsReplayBuffering, setRecordingDuration, setReplayBufferProgress, stopDurationTimer])
 
   const saveReplay = useCallback(() => {
@@ -465,6 +472,9 @@ export function useScreenRecorder(): ScreenRecorderHook {
 
     const mimeType = getMimeType()
     const chunks = replayChunksRef.current.map((c) => c.chunk)
+    if (headerChunkRef.current && chunks[0] !== headerChunkRef.current) {
+      chunks.unshift(headerChunkRef.current)
+    }
     const blob = new Blob(chunks, { type: mimeType || 'video/webm' })
     const url = URL.createObjectURL(blob)
     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
@@ -514,6 +524,7 @@ export function useScreenRecorder(): ScreenRecorderHook {
         clearInterval(replayPruneIntervalRef.current)
       }
       cleanupStream()
+      headerChunkRef.current = null
     }
   }, [stopDurationTimer, cleanupStream])
 
